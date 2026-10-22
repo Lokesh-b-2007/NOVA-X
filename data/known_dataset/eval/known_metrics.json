@@ -1,0 +1,15 @@
+{
+  "weights": "yolov8n.pt",
+  "data_yaml_sha256": "dfec7312bfd39158daa811629c5ac767ab9d9dd9cd9978218db17587c948904e",
+  "known_classes": [
+    "bicycle",
+    "car",
+    "dog",
+    "person"
+  ],
+  "evaluated_at": "2026-10-17T18:21:27Z",
+  "precision": 0.7634,
+  "recall": 0.4964,
+  "map_50": 0.5341,
+  "map_50_95": 0.3885
+}

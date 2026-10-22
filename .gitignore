@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+*.db
+
+# Node
+node_modules/
+dist/
+
+# Data / models (large, machine-generated)
+backend/datasets/
+backend/runs/
+backend/yolov8n.pt
+data/unknown_objects/*
+!data/unknown_objects/.gitkeep
+data/verified_objects/*
+!data/verified_objects/.gitkeep
+models/trained_models/*
+!models/trained_models/.gitkeep
+
+# OS
+.DS_Store

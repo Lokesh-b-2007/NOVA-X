@@ -1,0 +1,30 @@
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.19
+pydantic==2.10.3
+
+# --- Database ---
+sqlalchemy==2.0.36
+# Uncomment when moving from SQLite to Postgres:
+# psycopg2-binary==2.9.10
+
+# --- Config ---
+python-dotenv==1.0.1
+
+# --- Computer vision / numerics ---
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+Pillow==11.0.0
+
+# --- Machine learning ---
+torch==2.5.1          # CPU wheel installs automatically on machines without CUDA;
+torchvision==0.20.1   # see README for the CUDA-specific install command.
+ultralytics==8.3.40   # YOLO known-object detector
+transformers==4.47.1  # OWLv2 open-vocabulary detector
+scikit-learn==1.5.2   # DBSCAN clustering + evaluation metrics
+# hdbscan==0.8.40      # optional: enable NOVA_CLUSTERING_METHOD=hdbscan
+
+# --- Testing ---
+pytest==8.3.4
+httpx==0.28.1

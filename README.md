@@ -1,0 +1,255 @@
+# NOVA-X
+
+**Novelty-Aware Open-World Visual Intelligence** — an Open-World Object
+Detection system that detects known objects, flags out-of-distribution
+objects as unknown, guesses what an unknown object might be using
+open-vocabulary recognition, and lets a human confirm new classes for
+continual learning.
+
+> **Status: Phase 1 (Core Detection + Frontend)**. The backend implements
+> the full pipeline described below — known-class detection (YOLO),
+> OOD/novelty scoring, open-vocabulary recognition (OWLv2), the Novel
+> Object Repository, clustering, human verification, and a continual
+> learning workflow — and the frontend has all 11 pages wired to real
+> API endpoints. See **Honesty notes** below for exactly what does and
+> doesn't run out of the box without a GPU or extra setup.
+
+---
+
+## 1. Architecture
+
+```
+IMAGE / VIDEO / WEBCAM
+        |
+        v
+CUSTOM KNOWN-CLASS OBJECT DETECTOR (YOLOv8)
+        |
+        v
+OOD / NOVELTY DETECTION MODULE  (confidence + embedding-distance + energy)
+        |
+        +------------------+
+        |                  |
+        v                  v
+      KNOWN             UNKNOWN
+        |                  |
+        v                  v
+  Display Known      Crop Object Region
+   Object                   |
+                            v
+                   OPEN-VOCABULARY MODEL (OWLv2)
+                            |
+                            v
+                  NOVEL OBJECT REPOSITORY (SQLite)
+                            |
+                            v
+                     FEATURE EXTRACTION
+                            |
+                            v
+                  CLUSTERING (DBSCAN / HDBSCAN)
+                            |
+                            v
+                    HUMAN VERIFICATION
+                            |
+                            v
+                   CONTINUAL LEARNING
+```
+
+**Open-Set Detection vs. Open-Vocabulary Detection.** These are kept
+strictly separate, as required by the spec:
+- The **OOD/novelty module** (`backend/app/services/novelty_detection.py`)
+  is the *only* thing that decides KNOWN vs. UNKNOWN. It never consults
+  OWLv2.
+- **OWLv2** (`backend/app/models/open_vocabulary.py`) only ever runs on
+  objects the OOD module has *already* flagged unknown, purely to suggest
+  a human-readable label. It never overrides the OOD decision.
+- A suggested label becomes real training data only after a human
+  confirms it (`POST /api/unknown-objects/{id}/confirm`).
+
+---
+
+## 2. Project structure
+
+```
+NOVA-X/
+  frontend/           React + Vite + Tailwind dashboard (11 pages)
+  backend/
+    app/
+      api/            FastAPI routers (one file per resource)
+      models/         detector.py (YOLO), open_vocabulary.py (OWLv2)
+      services/       novelty_detection.py, clustering.py,
+                       continual_learning.py, pipeline.py, evaluation.py
+      database/       SQLAlchemy models + session management
+      schemas/        Pydantic request/response models
+      utils/          image_utils.py
+    requirements.txt
+    .env.example
+  data/
+    known_dataset/    put known-class training/eval data here
+    unknown_objects/  saved crops of everything flagged UNKNOWN
+    verified_objects/ (reserved for future full-scene verified exports)
+  models/trained_models/   continual-learning outputs land here
+  tests/              pytest unit tests (pure-logic, no GPU needed)
+  docs/
+```
+
+---
+
+## 3. Requirements
+
+- Python 3.10–3.12
+- Node.js 18+
+- ~4 GB free disk space (PyTorch + model weights)
+- A CUDA GPU is **optional** — everything falls back to CPU automatically
+  (slower, but functional) when `NOVA_DETECTOR_DEVICE=auto` (the default)
+  and no CUDA device is found.
+- Internet access on first run, to download:
+  - YOLOv8 pretrained weights (`yolov8n.pt`, ~6 MB, from Ultralytics)
+  - OWLv2 weights (`google/owlv2-base-patch16-ensemble`, ~1 GB, from
+    Hugging Face)
+
+---
+
+## 4. Backend setup
+
+### macOS / Linux
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload --port 8001
+```
+
+### Windows (PowerShell)
+```powershell
+cd backend
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+uvicorn app.main:app --reload --port 8001
+```
+
+### CPU-only machines (no CUDA)
+The default `torch`/`torchvision` versions in `requirements.txt` install a
+CPU-capable build on machines without CUDA already configured. If `pip`
+tries to pull a CUDA build you don't want, install the CPU wheel
+explicitly first:
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+```
+Leave `NOVA_DETECTOR_DEVICE=auto` in `.env` — the detector and OWLv2
+wrapper both auto-detect CUDA and fall back to CPU with a log message,
+never a crash.
+
+Once running, check **http://localhost:8001/api/health** and
+**http://localhost:8001/docs** (interactive API docs, auto-generated by
+FastAPI from the schemas in this repo).
+
+---
+
+## 5. Frontend setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open **http://localhost:5173**. The dev server proxies `/api/*` to
+`http://localhost:8001` (see `vite.config.js`), so both servers must be
+running. Live Vision asks OWLv2 for a suggestion once when each new unknown
+object is detected (not on every frame); first-time model loading or CPU
+inference may take several seconds.
+
+---
+
+## 6. Quick smoke test
+
+1. Start the backend and frontend (steps 4–5).
+2. Open the **Detect** page, upload any photo containing a person, car,
+   bicycle, or dog (the default `NOVA_KNOWN_CLASSES`) alongside something
+   else (a chair, a mug, a plant).
+3. You should see the person/car/etc. marked **KNOWN**, and the other
+   object marked **UNKNOWN** with an OWLv2 label guess.
+4. Go to **Unknown Repository** — the unknown crop should be listed.
+5. Go to **Verification**, confirm or correct its label.
+6. Go to **Continual Learning**, type the confirmed class name, and check
+   readiness — you'll need `NOVA_MIN_DATASET_SIZE` (default 30) confirmed
+   examples of the same class before training can start.
+
+---
+
+## 7. Honesty notes — what's real vs. what needs more setup
+
+This project follows a strict "never fake a result" rule throughout the
+codebase. Concretely:
+
+- **If YOLO or OWLv2 can't load** (missing dependency, no internet on
+  first run, bad weights path), the API returns a real `503` error with
+  the actual exception message — it never returns synthetic detections.
+- **Model Evaluation** (`/api/evaluation`) reports only measured metrics.
+  The known-detector cache and OOD/unknown metrics use annotated COCO128
+  data; open-vocabulary accuracy uses human-confirmed labels or custom
+  folder-labeled photos. These sources and their limitations are described
+  on the Evaluation page and in `data/known_dataset/eval/README.md`.
+- **Continual learning** assembles a real per-class image dataset from
+  human-verified crops and registers a new `KnownClass` + `ModelVersion`,
+  but stops short of automatically running a full YOLO fine-tune, because
+  that requires full-scene bounding-box annotations (not just object
+  crops) plus a GPU and a real time budget that a synchronous API request
+  can't assume. The exact `ultralytics` training call to enable this is
+  left as a clearly marked, ready-to-uncomment block in
+  `backend/app/services/continual_learning.py`. Registered labels are
+  matched against detector output (including known aliases such as YOLO's
+  `cell phone` for `phone`); registering a class does not make the base
+  detector detect arbitrary objects outside its existing model vocabulary.
+- **Embeddings** used for OOD distance scoring and clustering come from
+  the YOLO backbone's pooled features. If extraction fails for any reason,
+  the pipeline logs a warning and continues with confidence-only scoring
+  rather than fabricating a vector.
+
+---
+
+## 8. Configuration
+
+All configuration is via environment variables — see
+`backend/.env.example` for the full list (known classes, novelty
+thresholds, OVD vocabulary, clustering parameters, minimum dataset size
+for training, etc.). The **Settings** page in the frontend shows the
+active values for reference.
+
+---
+
+## 9. Roadmap (phases 2–9)
+
+Phase 1 (this delivery) covers the full pipeline end-to-end with baseline
+implementations of every module. Suggested next phases, per the original
+project brief:
+
+- **Phase 2** — swap in a more advanced OOD method (e.g. Mahalanobis
+  distance over a properly seeded embedding bank, or a learned OOD head)
+  in place of the hybrid heuristic in `novelty_detection.py`.
+- **Phase 3** — tune the OWLv2 vocabulary and score threshold against a
+  real labeled set.
+- **Phase 4–6** — already functional; refine the clustering parameters
+  and verification UX with real usage data.
+- **Phase 7** — wire in the real `ultralytics` fine-tuning call once a
+  full-scene annotated dataset exists for a new class.
+- **Phase 8** — already functional (`/live` page); tune
+  `FRAME_INTERVAL_MS` in `frontend/src/pages/Live.jsx` for your hardware.
+- **Phase 9** — populate `data/known_dataset/eval/` with real labeled
+  data to light up the Model Evaluation page's metrics.
+
+---
+
+## 10. Running tests
+
+```bash
+cd backend
+pip install -r requirements.txt   # includes pytest
+pytest ../tests/
+```
+The included tests exercise the OOD scoring logic directly and need no
+GPU or downloaded model weights.

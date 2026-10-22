@@ -1,0 +1,31 @@
+{
+  "weights": "yolov8n.pt",
+  "data_yaml_sha256": "dfec7312bfd39158daa811629c5ac767ab9d9dd9cd9978218db17587c948904e",
+  "known_classes": [
+    "bicycle",
+    "car",
+    "dog",
+    "person",
+    "phone"
+  ],
+  "ood_method": "hybrid",
+  "unknown_threshold": 0.7,
+  "suspicious_threshold": 0.4,
+  "embedding_extraction_available": true,
+  "feature_scoring_revision": 2,
+  "evaluated_at": "2026-10-17T19:28:52Z",
+  "auroc": 0.8642,
+  "aupr": 0.7887,
+  "fpr95": 0.2669,
+  "unknown_recall": 0.4142,
+  "unknown_precision": 0.7893,
+  "matched_detections": 418,
+  "ground_truth_unknown_objects": 606,
+  "matched_unknown_objects": 253,
+  "predicted_unknown_detections": 318,
+  "true_positive_unknown_detections": 251,
+  "false_negative_unknown_objects": 355,
+  "false_positive_unknown_detections": 67,
+  "matching_iou_threshold": 0.5,
+  "dataset": "COCO128 annotated validation boxes"
+}
