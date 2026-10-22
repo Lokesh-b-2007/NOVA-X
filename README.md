@@ -6,6 +6,8 @@ objects as unknown, guesses what an unknown object might be using
 open-vocabulary recognition, and lets a human confirm new classes for
 continual learning.
 
+NOVA-X: Novelty-Aware Open-World Visual Intelligence for Unknown Object Detection and Open-Vocabulary Recognition.
+
 > **Status: Phase 1 (Core Detection + Frontend)**. The backend implements
 > the full pipeline described below — known-class detection (YOLO),
 > OOD/novelty scoring, open-vocabulary recognition (OWLv2), the Novel
